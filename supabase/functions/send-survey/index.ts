@@ -1,10 +1,32 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.7'
-import { Resend } from 'https://esm.sh/@resend/node'
 
-const resend = new Resend(Deno.env.get('RESEND_API_KEY'))
+const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')!
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!
 const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+
+async function sendEmail(to: string, subject: string, text: string) {
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: 'surveys@yourdomain.com',
+      to,
+      subject,
+      text,
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(`Failed to send email: ${error.message}`);
+  }
+
+  return response.json();
+}
 
 serve(async (req) => {
   if (req.method !== 'POST') {
@@ -41,12 +63,7 @@ serve(async (req) => {
         const surveyUrl = `${baseUrl}/survey/${surveyId}/respond?email=${encodeURIComponent(email)}`
         const emailBody = `${survey.email_body}\n\nPlease take our quick survey: ${surveyUrl}`
 
-        return resend.emails.send({
-          from: 'surveys@yourdomain.com',
-          to: email,
-          subject: survey.subject,
-          text: emailBody,
-        })
+        return sendEmail(email, survey.subject, emailBody)
       })
     )
 
